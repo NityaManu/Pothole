@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ShockMap - Pothole Detection</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        body { margin: 0; }
+        #map { height: 100vh; }
+    </style>
+</head>
+<body>
+    <button onclick="enableVoice()" style="position:absolute; top:10px; right:10px; z-index:1000;">
+🔊 Enable Voice
+</button>
+    <div style="position:absolute; top:10px; left:10px; z-index:1000; background:white; padding:10px; border-radius:10px;">
+    <h3>ShockMap 🚧</h3>
+    <p>Total Potholes: <span id="count">0</span></p>
+    <p>
+        🟢 Mild<br>
+        🟠 Moderate<br>
+        🔴 Severe
+    </p>
+</div>
+<div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+        
+        var map = L.map('map').setView([17.3850, 78.4867], 13);
+
+    // Step 2: Add OpenStreetMap tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+    
+    // Step 3: Function to assign colors based on severity
+    function getColor(severity) {
+        if (severity >= 5) return 'red';       // Severe
+        else if (severity >= 3) return 'orange'; // Moderate
+        else return 'green';                    // Mild
+    }
+
+    // Step 4: Create a layer group to manage markers
+    let markersLayer = L.layerGroup().addTo(map);
+
+    // Step 5: Function to fetch pothole data from backend
+    function loadPotholes() {
+        // Remove old markers to avoid duplication
+        markersLayer.clearLayers();
+
+        // Fetch data from the Flask API
+        fetch(' http://10.177.37.124:5000')
+            .then(response => response.json())
+            .then(data => {
+                data.forEach(p => {
+                    L.circleMarker([p.latitude, p.longitude], {
+                        color: getColor(p.severity),
+                        fillColor: getColor(p.severity),
+                        fillOpacity: 0.8,
+                        radius: 8,
+                        weight: 2
+                    })
+                    .bindPopup(
+                        `<b>Pothole Detected</b><br>
+                         Severity: ${p.severity}<br>
+                         Time: ${p.timestamp}`
+                    )
+                    .addTo(markersLayer);
+                });
+            })
+            .catch(error => console.error('Error:', error));
+    }
+
+    // Step 6: Load potholes when the page first opens
+    loadPotholes();
+
+    // Step 7: Refresh the map every 5 seconds (Real-Time Update)
+    setInterval(loadPotholes, 5000);
+    
+        var map = L.map('map').setView([17.3850, 78.4867], 13); // Hyderabad
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        function getColor(severity) {
+            return severity > 3 ? 'red' :
+                   severity > 2 ? 'orange' : 'green';
+        }
+
+        function loadPotholes() {
+            fetch('/api/potholes')
+                .then(response => response.json())
+                .then(data => {
+                    data.forEach(p => {
+                        L.circleMarker([p.latitude, p.longitude], {
+                            color: getColor(p.severity),
+                            radius: 8
+                        }).addTo(map)
+                          .bindPopup(
+                            `<b>Pothole Detected</b><br>
+                             Severity: ${p.severity}<br>
+                             Time: ${p.timestamp}`
+                          );
+                    });
+                });
+        }
+
+       function loadPotholes() {
+    markersLayer.clearLayers();
+
+    fetch('/api/potholes')
+        .then(res => res.json())
+        .then(data => {
+
+            // Update counter
+            document.getElementById("count").innerText = data.length;
+
+            data.forEach(p => {
+
+                let color = getColor(p.severity);
+
+                L.circleMarker([p.latitude, p.longitude], {
+                    color: color,
+                    fillColor: color,
+                    fillOpacity: 0.8,
+                    radius: 8
+                })
+                .bindPopup(
+                    `<b>Pothole Detected 🚧</b><br>
+                     Severity: ${p.severity}<br>
+                     Time: ${p.timestamp}`
+                )
+                .addTo(markersLayer);
+            });
+        });
+}
+function checkNearbyPotholes(userLat, userLon, potholes) {
+    potholes.forEach(p => {
+        let distance = map.distance([userLat, userLon], [p.latitude, p.longitude]);
+
+        if (distance < 50) {
+            alert("⚠️ Pothole ahead!");
+        }
+    });
+}
+ loadPotholes(navigator.geolocation.getCurrentPosition(position => {
+    let userLat = position.coords.latitude;
+    let userLon = position.coords.longitude;
+
+    checkNearbyPotholes(userLat, userLon, data);
+}));
+    </script>
+    
+</body>
+</html>

@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>ShockMap Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #eef2f7;
+    padding: 20px;
+}
+
+h1 {
+    text-align: center;
+}
+
+/* GRID */
+.container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+}
+
+/* CARDS */
+.card {
+    padding: 20px;
+    border-radius: 15px;
+    color: white;
+    box-shadow: 0 6px 15px rgba(0,0,0,0.15);
+}
+
+/* COLORS */
+.total { background: linear-gradient(45deg, #4facfe, #00f2fe); }
+.health { background: linear-gradient(45deg, #43e97b, #38f9d7); }
+.mildBox { background: #27ae60; }
+.moderateBox { background: #f39c12; }
+.severeBox { background: #e74c3c; }
+.recent { background: #34495e; }
+.area { background: #8e44ad; }
+
+/* TEXT */
+.big {
+    font-size: 30px;
+    font-weight: bold;
+}
+
+/* GRAPH */
+.graph-card {
+    grid-column: span 2;
+    background: white;
+    color: black;
+}
+
+canvas {
+    height: 300px !important;
+}
+</style>
+</head>
+
+<body>
+
+<h1>📊 ShockMap Dashboard</h1>
+
+<div class="container">
+
+<div class="card total">
+<h3>Total Potholes</h3>
+<p class="big" id="total">0</p>
+</div>
+
+<div class="card health">
+<h3>Road Health</h3>
+<p class="big" id="health">Loading...</p>
+</div>
+
+<div class="card mildBox">
+<h3>Mild</h3>
+<p class="big" id="mild">0</p>
+</div>
+
+<div class="card moderateBox">
+<h3>Moderate</h3>
+<p class="big" id="moderate">0</p>
+</div>
+
+<div class="card severeBox">
+<h3>Severe</h3>
+<p class="big" id="severe">0</p>
+</div>
+
+<div class="card recent">
+<h3>Recent Detections</h3>
+<ul id="recent"></ul>
+</div>
+
+<div class="card area">
+<h3>Area Analysis</h3>
+<ul id="areas"></ul>
+</div>
+
+<!-- BIG SPIKE GRAPH -->
+<div class="card graph-card">
+<h3>Live Shock Graph (Spikes)</h3>
+<canvas id="spikeChart"></canvas>
+</div>
+
+</div>
+
+<script>
+
+
+
+let spikeChart;
+
+// =========================
+// 📊 INIT CHART
+// =========================
+function initChart() {
+    const ctx = document.getElementById("spikeChart").getContext("2d");
+
+    spikeChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: "Severity Spike",
+                data: [],
+                borderColor: "red",
+                fill: false,
+                tension: 0.2
+            }]
+        },
+        options: {
+            animation: false,
+            responsive: true,
+            scales: {
+                y: {
+                    min: 0,
+                    max: 6
+                }
+            }
+        }
+    });
+}
+
+// =========================
+// 📈 UPDATE GRAPH (SAFE)
+// =========================
+function updateGraph(value) {
+    let time = new Date().toLocaleTimeString();
+
+    spikeChart.data.labels.push(time);
+    spikeChart.data.datasets[0].data.push(value);
+
+    // keep last 20 points only
+    if (spikeChart.data.labels.length > 20) {
+        spikeChart.data.labels.shift();
+        spikeChart.data.datasets[0].data.shift();
+    }
+
+    spikeChart.update();
+}
+
+// =========================
+// 📍 AREA GROUPING
+// =========================
+function calculateArea(data) {
+    let areas = {};
+
+    data.forEach(p => {
+        let key = p.latitude.toFixed(2) + "," + p.longitude.toFixed(2);
+        areas[key] = (areas[key] || 0) + 1;
+    });
+
+    return areas;
+}
+
+// =========================
+// 🚀 MAIN LIVE DASHBOARD
+// =========================
+function loadDashboard() {
+
+    fetch("http://10.177.37.124:5000/api/potholes")
+        .then(res => res.json())
+        .then(data => {
+
+            // RESET VALUES EACH TIME (IMPORTANT FIX)
+            let total = data.length;
+            let mild = 0, moderate = 0, severe = 0;
+
+            // reset graph to avoid duplicate spikes on refresh
+            spikeChart.data.labels = [];
+            spikeChart.data.datasets[0].data = [];
+
+            data.forEach(p => {
+
+                let s = Number(p.severity);
+
+                // graph update
+                updateGraph(s);
+
+                // classification
+                if (s < 3) mild++;
+                else if (s < 5) moderate++;
+                else severe++;
+            });
+
+            // =========================
+            // 📊 UI UPDATES
+            // =========================
+            document.getElementById("total").innerText = total;
+            document.getElementById("mild").innerText = mild;
+            document.getElementById("moderate").innerText = moderate;
+            document.getElementById("severe").innerText = severe;
+
+            // ROAD HEALTH
+            let health =
+                severe > 3 ? "BAD 🚨" :
+                moderate > 3 ? "MODERATE ⚠️" :
+                "GOOD ✅";
+
+            document.getElementById("health").innerText = health;
+
+            // =========================
+            // 🕒 RECENT LIST
+            // =========================
+            let recent = document.getElementById("recent");
+            recent.innerHTML = "";
+
+            data.slice(-5).reverse().forEach(p => {
+                let li = document.createElement("li");
+                li.innerText = `${p.timestamp} → Severity ${p.severity}`;
+                recent.appendChild(li);
+            });
+
+            // =========================
+            // 📍 AREA ANALYSIS
+            // =========================
+            let areaData = calculateArea(data);
+            let areaList = document.getElementById("areas");
+            areaList.innerHTML = "";
+
+            for (let key in areaData) {
+                let li = document.createElement("li");
+                li.innerText = `${key} → ${areaData[key]} potholes`;
+                areaList.appendChild(li);
+            }
+
+        })
+        .catch(err => {
+            console.error("API Error:", err);
+        });
+}
+
+// =========================
+// 🔁 AUTO RUN SYSTEM
+// =========================
+initChart();
+loadDashboard();              // initial load
+setInterval(loadDashboard, 3000); // refresh every 3 sec
+
+
+</script>
+
+</body>
+</html>
